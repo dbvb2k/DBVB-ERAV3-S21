@@ -29,21 +29,22 @@ from td3 import TD3, ReplayBuffer, device
 if not os.path.exists("./images"):
     os.makedirs("./images")
 
-# Create MASK1.png if it doesn't exist
-if not os.path.exists("./images/MASK1.png"):
-    # Create a white circle on black background
-    mask1 = np.zeros((100, 100), dtype=np.uint8)
-    center = (50, 50)
-    radius = 20
-    y, x = np.ogrid[-center[0]:100-center[0], -center[1]:100-center[1]]
-    mask1[x*x + y*y <= radius*radius] = 255
-    PILImage.fromarray(mask1).save("./images/MASK1.png")
+# Check for required image files
+required_images = {
+    "MASK1.png": "Required for sensor visualization",
+    "mask.png": "Required for sensor visualization",
+    "sand.jpg": "Required for identifying the boundaries"
+}
 
-# Create mask.png if it doesn't exist
-if not os.path.exists("./images/mask.png"):
-    # Create a black image (will be filled with sand later)
-    mask = np.zeros((1429, 660), dtype=np.uint8)
-    PILImage.fromarray(mask).save("./images/mask.png")
+for image_name, description in required_images.items():
+    image_path = f"./images/{image_name}"
+    if not os.path.exists(image_path):
+        raise FileNotFoundError(
+            f"Required image file not found: {image_name}\n"
+            f"Description: {description}\n"
+            f"Expected location: {image_path}\n"
+            f"Please ensure all required image files are present in the ./images directory."
+        )
 
 # Adding this line if we don't want the right click to put a red point
 Config.set('input', 'mouse', 'mouse,multitouch_on_demand')
@@ -73,17 +74,36 @@ evaluation_rewards = []
 EVALUATION_INTERVAL = 5000  # Evaluate every 5000 timesteps
 
 # Define the three target points (A1, A2, A3) globally
+# ==============================================================================
+# Rohan's image - target points
+# target_points = [
+#     {'x': 1220, 'y': 618},  # A1
+#     {'x': 200, 'y': 285},   # A2
+#     {'x': 700, 'y': 265}    # A3
+# ]
+
+# # Define the starting position for the car
+# start_position = {
+#     'x': 580,  # Starting x coordinate
+#     'y': 450   # Starting y coordinate
+# }
+
+# ==============================================================================
+# Venkatesh's image - target points
+# Define the three target points (A1, A2, A3) globally
 target_points = [
-    {'x': 1220, 'y': 618},  # A1
-    {'x': 200, 'y': 285},   # A2
-    {'x': 700, 'y': 265}    # A3
+    {'x': 1240, 'y': 560},  # A1
+    {'x': 210, 'y': 535},      # A2
+    {'x': 700, 'y': 100}    # A3
 ]
 
 # Define the starting position for the car
 start_position = {
-    'x': 580,  # Starting x coordinate
-    'y': 450   # Starting y coordinate
+    'x': 465,  # Starting x coordinate
+    'y': 375   # Starting y coordinate
 }
+# ==============================================================================
+
 
 # Initialize replay buffer for TD3
 replay_buffer = ReplayBuffer(max_size=1e6)
@@ -217,25 +237,38 @@ class Game(Widget):
     target_markers = []  # List to store target markers
     start_marker = None  # Start position marker
 
+    def __init__(self, **kwargs):
+        super(Game, self).__init__(**kwargs)
+        print("\nInitializing Game Environment...")
+        print(f"Window Size: {self.width}x{self.height}")
+        print(f"Target Points: {target_points}")
+        print(f"Start Position: {start_position}")
+        print("Game Environment initialized successfully!")
+
     def serve_car(self):
+        print("\nSetting up car and markers...")
         # Set the car's initial position to the defined start position
         self.car.x = start_position['x']
         self.car.y = start_position['y']
         self.car.velocity = Vector(6, 0)
+        print(f"Car positioned at: ({self.car.x}, {self.car.y})")
         
         # Initialize start marker
         if self.start_marker is None:
             self.start_marker = StartMarker()
             self.start_marker.update_pos(start_position['x'], start_position['y'])
             self.add_widget(self.start_marker)
+            print("Start marker initialized")
         
         # Initialize target markers
         self.target_markers = []
-        for point in target_points:
+        for i, point in enumerate(target_points):
             marker = TargetMarker()
             marker.update_pos(point['x'], point['y'])
             self.add_widget(marker)
             self.target_markers.append(marker)
+            print(f"Target marker {i+1} initialized at: ({point['x']}, {point['y']})")
+        print("All markers initialized successfully!")
 
     def update(self, dt):
         global brain
@@ -258,7 +291,9 @@ class Game(Widget):
         longueur = self.width
         largeur = self.height
         if first_update:
+            print("\nInitializing game state...")
             init()
+            print("Game state initialized!")
 
         # Get current state
         xx = goal_x - self.car.x
@@ -348,7 +383,10 @@ class Game(Widget):
             goal_x = target_points[current_target_index]['x']
             goal_y = target_points[current_target_index]['y']
             last_reward = 5  # Increased bonus reward for reaching target
+            print(f"\nTarget Reached!")
             print(f"Switching to target point {current_target_index + 1}")
+            print(f"New target coordinates: ({goal_x}, {goal_y})")
+            print(f"Current reward: {last_reward}")
 
         # Add transition to replay buffer
         done = False  # In this continuous task, episodes don't really end
@@ -378,16 +416,25 @@ class Game(Widget):
 
         # Print episode information at regular intervals
         if total_timesteps % 1000 == 0:
-            print(f"Total Timesteps: {total_timesteps} Episode Num: {episode_num} Reward: {episode_reward}")
+            print(f"\nEpisode Summary:")
+            print(f"Total Timesteps: {total_timesteps}")
+            print(f"Episode Num: {episode_num}")
+            print(f"Episode Reward: {episode_reward:.4f}")
+            print(f"Current Distance to Target: {distance:.2f}")
+            print(f"Current Speed: {np.linalg.norm(self.car.velocity):.2f}")
             episode_reward = 0
             episode_num += 1
 
         # Evaluation step
         if total_timesteps % EVALUATION_INTERVAL == 0:
             avg_reward = sum(evaluation_rewards) / len(evaluation_rewards) if evaluation_rewards else 0
-            print("-" * 39)
-            print(f"Average Reward over the Evaluation Step: {avg_reward:.6f}")
-            print("-" * 39)
+            print("\n" + "="*50)
+            print("Evaluation Summary:")
+            print(f"Total Timesteps: {total_timesteps}")
+            print(f"Average Reward: {avg_reward:.6f}")
+            print(f"Current Exploration Noise: {brain.exploration_noise:.4f}")
+            print(f"Replay Buffer Size: {len(replay_buffer.storage)}")
+            print("="*50 + "\n")
             evaluation_rewards = []
         else:
             evaluation_rewards.append(last_reward)
@@ -454,13 +501,13 @@ class CarApp(App):
 
     def save(self, obj):
         print("saving brain...")
-        brain.save()
+        brain.save("td3_model", "./checkpoints")
         plt.plot(scores)
         plt.show()
 
     def load(self, obj):
         print("loading last saved brain...")
-        brain.load()
+        brain.load("td3_model", "./checkpoints")
 
 # Running the whole thing
 if __name__ == '__main__':
