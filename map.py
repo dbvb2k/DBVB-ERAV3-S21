@@ -31,11 +31,14 @@ if not os.path.exists("./images"):
 
 # Check for required image files
 required_images = {
+    "citymap.png": "Required for displaying the map",
+    "car.png": "Required for displaying the car",
     "MASK1.png": "Required for sensor visualization",
     "mask.png": "Required for sensor visualization",
     "sand.jpg": "Required for identifying the boundaries"
 }
 
+# Check if all required image files are present
 for image_name, description in required_images.items():
     image_path = f"./images/{image_name}"
     if not os.path.exists(image_path):
@@ -473,7 +476,7 @@ class MyPaintWidget(Widget):
             last_x = x
             last_y = y
 
-# Adding the API Buttons (clear, save and load)
+# Adding the API Buttons (clear, Save and Load)
 
 class CarApp(App):
 
@@ -482,12 +485,16 @@ class CarApp(App):
         parent.serve_car()
         Clock.schedule_interval(parent.update, 1.0/60.0)
         self.painter = MyPaintWidget()
-        clearbtn = Button(text = 'clear')
-        savebtn = Button(text = 'save', pos = (parent.width, 0))
-        loadbtn = Button(text = 'load', pos = (2 * parent.width, 0))
-        clearbtn.bind(on_release = self.clear_canvas)
-        savebtn.bind(on_release = self.save)
-        loadbtn.bind(on_release = self.load)
+        
+        # Create buttons with reduced height
+        clearbtn = Button(text='clear', size_hint_y=0.1)
+        savebtn = Button(text='Save', size_hint_y=0.01, pos=(parent.width, 0))
+        loadbtn = Button(text='Load', size_hint_y=0.01, pos=(2 * parent.width, 0))
+        
+        clearbtn.bind(on_release=self.clear_canvas)
+        savebtn.bind(on_release=self.save)
+        loadbtn.bind(on_release=self.load)
+        
         parent.add_widget(self.painter)
         parent.add_widget(clearbtn)
         parent.add_widget(savebtn)
@@ -500,13 +507,13 @@ class CarApp(App):
         sand = np.zeros((longueur,largeur))
 
     def save(self, obj):
-        print("saving brain...")
+        print("Saving brain...")
         brain.save("td3_model", "./checkpoints")
         plt.plot(scores)
         plt.show()
 
     def load(self, obj):
-        print("loading last saved brain...")
+        print("Loading last saved brain...")
         brain.load("td3_model", "./checkpoints")
 
 # Running the whole thing
