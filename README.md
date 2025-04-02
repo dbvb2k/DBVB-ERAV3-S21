@@ -35,7 +35,7 @@ The simulation uses two main images for the environment:
 
 1. Clone the repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/dbvb2k/DBVB-ERAV3-S21
 cd self-driving-car-td3
 ```
 
@@ -74,16 +74,16 @@ The TD3 (Twin Delayed Deep Deterministic Policy Gradient) implementation in `td3
 
 ### Network Architecture
 - Actor Network:
-  - Input layer: state_dim → 400 neurons
-  - Hidden layer: 400 → 300 neurons
-  - Output layer: 300 → action_dim neurons
-  - Uses ReLU activation and tanh output
+  - Input layer: state_dim → 32 neurons
+  - Hidden layer: 32 → 16 neurons
+  - Output layer: 16 → action_dim neurons
+  - Uses ReLU activation and tanh output with max_action scaling
 
 - Critic Networks (Twin):
   - Two identical networks for Q-value estimation
-  - Input: state + action → 400 neurons
-  - Hidden: 400 → 300 neurons
-  - Output: 300 → 1 neuron (Q-value)
+  - Input: state + action → 32 neurons
+  - Hidden: 32 → 16 neurons
+  - Output: 16 → 1 neuron (Q-value)
   - Uses ReLU activation
 
 ### Key Features
@@ -100,7 +100,7 @@ The TD3 (Twin Delayed Deep Deterministic Policy Gradient) implementation in `td3
 
 3. **Optimization**:
    - Adam optimizer with learning rate: 3e-4
-   - Batch size: 100
+   - Batch size: 200
    - Discount factor: 0.99
    - Policy noise: 0.2
    - Noise clipping: 0.5
