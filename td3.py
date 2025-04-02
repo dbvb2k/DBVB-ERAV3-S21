@@ -12,9 +12,9 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 class Actor(nn.Module):
     def __init__(self, state_dim, action_dim, max_action):
         super(Actor, self).__init__()
-        self.layer_1 = nn.Linear(state_dim, 400)
-        self.layer_2 = nn.Linear(400, 300)
-        self.layer_3 = nn.Linear(300, action_dim)
+        self.layer_1 = nn.Linear(state_dim, 32)
+        self.layer_2 = nn.Linear(32, 16)
+        self.layer_3 = nn.Linear(16, action_dim)
         self.max_action = max_action
 
     def forward(self, x):
@@ -27,13 +27,13 @@ class Critic(nn.Module):
     def __init__(self, state_dim, action_dim):
         super(Critic, self).__init__()
         # Defining the first Critic neural network
-        self.layer_1 = nn.Linear(state_dim + action_dim, 400)
-        self.layer_2 = nn.Linear(400, 300)
-        self.layer_3 = nn.Linear(300, 1)
+        self.layer_1 = nn.Linear(state_dim + action_dim, 32)
+        self.layer_2 = nn.Linear(32, 16)
+        self.layer_3 = nn.Linear(16, 1)
         # Defining the second Critic neural network
-        self.layer_4 = nn.Linear(state_dim + action_dim, 400)
-        self.layer_5 = nn.Linear(400, 300)
-        self.layer_6 = nn.Linear(300, 1)
+        self.layer_4 = nn.Linear(state_dim + action_dim, 32)
+        self.layer_5 = nn.Linear(32, 16)
+        self.layer_6 = nn.Linear(16, 1)
 
     def forward(self, x, u):
         xu = torch.cat([x, u], 1)
@@ -154,7 +154,7 @@ class TD3(object):
         
         return action
 
-    def train(self, replay_buffer, iterations, batch_size=100, discount=0.99, tau=0.005, 
+    def train(self, replay_buffer, iterations, batch_size=200, discount=0.99, tau=0.005, 
               policy_noise=0.2, noise_clip=0.5, policy_freq=2):
         if not hasattr(self, 'training_step'):
             self.training_step = 0

@@ -2,7 +2,7 @@
 
 # Importing the libraries
 import numpy as np
-from random import random, randint
+import random
 import matplotlib.pyplot as plt
 import time
 import torch
@@ -76,40 +76,21 @@ episode_reward = 0
 evaluation_rewards = []
 EVALUATION_INTERVAL = 5000  # Evaluate every 5000 timesteps
 
-# Define the three target points (A1, A2, A3) globally
-# ==============================================================================
-# Rohan's image - target points
-# target_points = [
-#     {'x': 1220, 'y': 618},  # A1
-#     {'x': 200, 'y': 285},   # A2
-#     {'x': 700, 'y': 265}    # A3
-# ]
+# Initialize replay buffer for TD3
+replay_buffer = ReplayBuffer(max_size=1e6)
 
-# # Define the starting position for the car
-# start_position = {
-#     'x': 580,  # Starting x coordinate
-#     'y': 450   # Starting y coordinate
-# }
-
-# ==============================================================================
-# Venkatesh's image - target points
 # Define the three target points (A1, A2, A3) globally
 target_points = [
-    {'x': 1240, 'y': 560},  # A1
-    {'x': 210, 'y': 535},      # A2
-    {'x': 700, 'y': 100}    # A3
+    {'x': 1220, 'y': 618},  # A1
+    {'x': 200, 'y': 285},   # A2
+    {'x': 700, 'y': 265}    # A3
 ]
 
 # Define the starting position for the car
 start_position = {
-    'x': 465,  # Starting x coordinate
-    'y': 375   # Starting y coordinate
+    'x': 580,  # Starting x coordinate
+    'y': 450   # Starting y coordinate
 }
-# ==============================================================================
-
-
-# Initialize replay buffer for TD3
-replay_buffer = ReplayBuffer(max_size=1e6)
 
 # textureMask = CoreImage(source="./kivytest/simplemask1.png")
 
@@ -185,17 +166,33 @@ class Ball3(Widget):
 
 # Creating the target marker class
 class TargetMarker(Widget):
-    def __init__(self, **kwargs):
+    def __init__(self, label_text, **kwargs):
         super(TargetMarker, self).__init__(**kwargs)
         with self.canvas:
             Color(0.5, 0, 0)  # Dark red color for initial state
-            self.circle = Ellipse(size=(20, 20))  # Size of the marker
-            self.circle.pos = (self.x - 10, self.y - 10)  # Center the circle
+            self.circle = Ellipse(size=(25, 25))  # Increased size for better visibility
+            self.circle.pos = (self.x - 15, self.y - 15)  # Adjusted for new size
+        
+        # Add the label
+        self.label = Label(
+            text=label_text,
+            color=(1, 1, 1, 1),  # White color
+            font_size='20sp',  # Increased font size
+            bold=True,
+            size_hint=(None, None),
+            size=(40, 30),  # Fixed size for the label
+            center_x=self.center_x,
+            center_y=self.center_y,
+            padding=(5, 5)  # Add padding around text
+        )
+        self.add_widget(self.label)
 
     def update_pos(self, x, y):
         self.x = x
         self.y = y
-        self.circle.pos = (x - 10, y - 10)
+        self.circle.pos = (x - 15, y - 15)  # Adjusted for new circle size
+        self.label.center_x = x
+        self.label.center_y = y
 
 # Creating the start marker class
 class StartMarker(Widget):
@@ -239,39 +236,33 @@ class Game(Widget):
     ball3 = ObjectProperty(None)
     target_markers = []  # List to store target markers
     start_marker = None  # Start position marker
-
-    def __init__(self, **kwargs):
-        super(Game, self).__init__(**kwargs)
-        print("\nInitializing Game Environment...")
-        print(f"Window Size: {self.width}x{self.height}")
-        print(f"Target Points: {target_points}")
-        print(f"Start Position: {start_position}")
-        print("Game Environment initialized successfully!")
-
+    position_history = []  # Track car's position history
+    max_history_length = 50  # Maximum number of positions to track
+    last_positions = set()  # Set of recent positions to detect loops
+    
     def serve_car(self):
-        print("\nSetting up car and markers...")
+        print(f"Initializing car at position: ({start_position['x']}, {start_position['y']})")
         # Set the car's initial position to the defined start position
         self.car.x = start_position['x']
         self.car.y = start_position['y']
+        print(f"Car position after setting: ({self.car.x}, {self.car.y})")
         self.car.velocity = Vector(6, 0)
-        print(f"Car positioned at: ({self.car.x}, {self.car.y})")
         
         # Initialize start marker
         if self.start_marker is None:
             self.start_marker = StartMarker()
             self.start_marker.update_pos(start_position['x'], start_position['y'])
             self.add_widget(self.start_marker)
-            print("Start marker initialized")
+            print(f"Start marker initialized at: ({start_position['x']}, {start_position['y']})")
         
         # Initialize target markers
         self.target_markers = []
         for i, point in enumerate(target_points):
-            marker = TargetMarker()
+            marker = TargetMarker(label_text=f'A{i+1}')  # Create marker with label A1, A2, or A3
             marker.update_pos(point['x'], point['y'])
             self.add_widget(marker)
             self.target_markers.append(marker)
             print(f"Target marker {i+1} initialized at: ({point['x']}, {point['y']})")
-        print("All markers initialized successfully!")
 
     def update(self, dt):
         global brain
@@ -294,9 +285,12 @@ class Game(Widget):
         longueur = self.width
         largeur = self.height
         if first_update:
-            print("\nInitializing game state...")
+            print(f"First update - Window dimensions: {longueur}x{largeur}")
             init()
-            print("Game state initialized!")
+
+        # Add position logging every 100 frames
+        if int(time.time() * 60) % 100 == 0:
+            print(f"Current car position: ({self.car.x}, {self.car.y})")
 
         # Get current state
         xx = goal_x - self.car.x
@@ -316,6 +310,17 @@ class Game(Widget):
         # Move the car
         self.car.move(rotation)
         
+        # Update position history
+        current_pos = (int(self.car.x), int(self.car.y))
+        self.position_history.append(current_pos)
+        if len(self.position_history) > self.max_history_length:
+            self.position_history.pop(0)
+        
+        # Update last positions set
+        self.last_positions.add(current_pos)
+        if len(self.last_positions) > 100:  # Keep last 100 positions
+            self.last_positions.remove(next(iter(self.last_positions)))
+
         # Get new state
         new_xx = goal_x - self.car.x
         new_yy = goal_y - self.car.y
@@ -338,58 +343,127 @@ class Game(Widget):
                     Color(0, 1, 0)  # Green for current target
                 else:
                     Color(0.5, 0, 0)  # Dark red for other targets
-                marker.circle = Ellipse(size=(20, 20))
-                marker.circle.pos = (marker.x - 10, marker.y - 10)
+                marker.circle = Ellipse(size=(25, 25))  # Match the new size
+                marker.circle.pos = (marker.x - 15, marker.y - 15)  # Adjusted for new size
 
         # Calculate reward
         if sand[int(self.car.x),int(self.car.y)] > 0:
             self.car.velocity = Vector(0.5, 0).rotate(self.car.angle)
+            print(1, goal_x, goal_y, distance, int(self.car.x),int(self.car.y), im.read_pixel(int(self.car.x),int(self.car.y)))
             last_reward = -1
-        else:
+        else: # otherwise
             self.car.velocity = Vector(2, 0).rotate(self.car.angle)
-            # Base reward for being on track
-            last_reward = -0.1
-            
-            # Reward for getting closer to target
+            last_reward = -0.2
+            print(0, goal_x, goal_y, distance, int(self.car.x),int(self.car.y), im.read_pixel(int(self.car.x),int(self.car.y)))
             if distance < last_distance:
-                last_reward = 0.5
+                last_reward = 0.1
+
+           # Calculate progress towards target
+            progress = last_distance - distance
+            
+            # Stronger reward for making progress towards target
+            if progress > 0:
+                last_reward = 2.0  # Significantly increased reward for moving towards target
             else:
-                # Small penalty for moving away from target
-                last_reward = -0.2
+                # Stronger penalty for moving away from target
+                last_reward = -1.0
             
-            # Penalty for sharp turns to discourage circular movements
+            # Calculate angle to target
+            target_angle = Vector(*self.car.velocity).angle((goal_x - self.car.x, goal_y - self.car.y))/180.
+            angle_diff = abs(target_angle)
+            
+            # Stronger penalty for large angle differences from target
+            if angle_diff > 0.5:  # If angle difference is more than 90 degrees
+                last_reward -= angle_diff * 1.0  # Doubled penalty
+            
+            # Stronger penalty for sharp turns
             if abs(rotation) > 3:
-                last_reward -= 0.3
+                last_reward -= 1.0  # Doubled penalty for sharp turns
             
-            # Bonus for maintaining good speed
-            if abs(self.car.velocity[0]) > 1.5:
-                last_reward += 0.1
+            # Bonus for maintaining good speed and moving in the right direction
+            if abs(self.car.velocity[0]) > 1.5 and angle_diff < 0.3:
+                last_reward += 0.5  # Increased bonus for good speed and direction
+            
+            # Stronger penalty for very slow movement
+            if abs(self.car.velocity[0]) < 0.5:
+                last_reward -= 0.5
 
-        # Additional penalties for hitting boundaries
-        if self.car.x < 5:
-            self.car.x = 5
-            last_reward = -1
-        if self.car.x > self.width - 5:
-            self.car.x = self.width - 5
-            last_reward = -1
-        if self.car.y < 5:
-            self.car.y = 5
-            last_reward = -1
-        if self.car.y > self.height - 5:
-            self.car.y = self.height - 5
-            last_reward = -1
+            # Penalty for revisiting recent positions (detect loops)
+            if len(self.position_history) > 10:
+                recent_positions = set(self.position_history[-10:])
+                if current_pos in recent_positions:
+                    last_reward -= 1.0  # Penalty for revisiting recent positions
 
-        # Check if reached target
+            # Penalty for moving in circles
+            if len(self.position_history) > 20:
+                # Calculate the center of recent positions
+                recent_x = sum(p[0] for p in self.position_history[-20:]) / 20
+                recent_y = sum(p[1] for p in self.position_history[-20:]) / 20
+                # Calculate average distance from center
+                avg_dist = sum(np.sqrt((p[0] - recent_x)**2 + (p[1] - recent_y)**2) 
+                             for p in self.position_history[-20:]) / 20
+                # If average distance is small, likely moving in circles
+                if avg_dist < 30:
+                    last_reward -= 2.0  # Strong penalty for circular movement
+
+
+        # Calculate distance to boundaries
+        dist_to_left = self.car.x
+        dist_to_right = self.width - self.car.x
+        dist_to_top = self.height - self.car.y
+        dist_to_bottom = self.car.y
+        
+        # Define boundary thresholds
+        warning_threshold = 50  # Distance at which to start applying progressive penalties
+        collision_threshold = 10  # Distance at which to apply collision penalties
+        
+        # Apply progressive penalties as the car gets closer to boundaries
+        if dist_to_left < warning_threshold:
+            last_reward -= (warning_threshold - dist_to_left) / warning_threshold
+        if dist_to_right < warning_threshold:
+            last_reward -= (warning_threshold - dist_to_right) / warning_threshold
+        if dist_to_top < warning_threshold:
+            last_reward -= (warning_threshold - dist_to_top) / warning_threshold
+        if dist_to_bottom < warning_threshold:
+            last_reward -= (warning_threshold - dist_to_bottom) / warning_threshold
+
+        # Apply collision penalties and reset position
+        if dist_to_left < collision_threshold:
+            self.car.x = collision_threshold
+            last_reward = -2  # Increased penalty for collision
+            # Rotate car by 90 degrees to help it escape the boundary
+            self.car.angle = (self.car.angle + 90) % 360
+            # Reset velocity in the new direction
+            self.car.velocity = Vector(2, 0).rotate(self.car.angle)
+        if dist_to_right < collision_threshold:
+            self.car.x = self.width - collision_threshold
+            last_reward = -2
+            # Rotate car by -90 degrees to help it escape the boundary
+            self.car.angle = (self.car.angle - 90) % 360
+            # Reset velocity in the new direction
+            self.car.velocity = Vector(2, 0).rotate(self.car.angle)
+        if dist_to_top < collision_threshold:
+            self.car.y = self.height - collision_threshold
+            last_reward = -2
+            # Rotate car by 180 degrees to help it escape the boundary
+            self.car.angle = (self.car.angle + 180) % 360
+            # Reset velocity in the new direction
+            self.car.velocity = Vector(2, 0).rotate(self.car.angle)
+        if dist_to_bottom < collision_threshold:
+            self.car.y = collision_threshold
+            last_reward = -2
+            # Rotate car by 180 degrees to help it escape the boundary
+            self.car.angle = (self.car.angle + 180) % 360
+            # Reset velocity in the new direction
+            self.car.velocity = Vector(2, 0).rotate(self.car.angle)
+
         if distance < 25:
             # Switch to next target point
             current_target_index = (current_target_index + 1) % len(target_points)
             goal_x = target_points[current_target_index]['x']
             goal_y = target_points[current_target_index]['y']
-            last_reward = 5  # Increased bonus reward for reaching target
-            print(f"\nTarget Reached!")
+            last_reward = 5  # Reward for reaching target
             print(f"Switching to target point {current_target_index + 1}")
-            print(f"New target coordinates: ({goal_x}, {goal_y})")
-            print(f"Current reward: {last_reward}")
 
         # Add transition to replay buffer
         done = False  # In this continuous task, episodes don't really end
@@ -410,7 +484,7 @@ class Game(Widget):
             state_tensor = torch.FloatTensor(np.array(state).reshape(1, -1)).to(device)
             action_tensor = torch.FloatTensor(np.array([action]).reshape(1, -1)).to(device)
             scores.append(brain.critic.Q1(state_tensor, action_tensor).mean().item())
-        
+            
         last_distance = distance
 
         # Update episode tracking
@@ -476,29 +550,27 @@ class MyPaintWidget(Widget):
             last_x = x
             last_y = y
 
-# Adding the API Buttons (clear, Save and Load)
+# Adding the API Buttons (clear, save and load)
 
 class CarApp(App):
 
     def build(self):
         parent = Game()
-        parent.serve_car()
         Clock.schedule_interval(parent.update, 1.0/60.0)
         self.painter = MyPaintWidget()
-        
-        # Create buttons with reduced height
-        clearbtn = Button(text='clear', size_hint_y=0.1)
-        savebtn = Button(text='Save', size_hint_y=0.01, pos=(parent.width, 0))
-        loadbtn = Button(text='Load', size_hint_y=0.01, pos=(2 * parent.width, 0))
-        
-        clearbtn.bind(on_release=self.clear_canvas)
-        savebtn.bind(on_release=self.save)
-        loadbtn.bind(on_release=self.load)
-        
+        clearbtn = Button(text = 'clear')
+        savebtn = Button(text = 'save', pos = (parent.width, 0))
+        loadbtn = Button(text = 'load', pos = (2 * parent.width, 0))
+        clearbtn.bind(on_release = self.clear_canvas)
+        savebtn.bind(on_release = self.save)
+        loadbtn.bind(on_release = self.load)
         parent.add_widget(self.painter)
         parent.add_widget(clearbtn)
         parent.add_widget(savebtn)
         parent.add_widget(loadbtn)
+        
+        # Schedule car initialization after a short delay
+        Clock.schedule_once(lambda dt: parent.serve_car(), 0.1)
         return parent
 
     def clear_canvas(self, obj):
