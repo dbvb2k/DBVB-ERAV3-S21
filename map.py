@@ -321,13 +321,55 @@ class Game(Widget):
         if len(self.last_positions) > 100:  # Keep last 100 positions
             self.last_positions.remove(next(iter(self.last_positions)))
 
+        # Stronger penalty for revisiting recent positions (detect loops)
+        if len(self.position_history) > 10:
+            recent_positions = set(self.position_history[-10:])
+            if current_pos in recent_positions:
+                last_reward -= 2.0  # Increased penalty for revisiting positions
+
+        # Penalty for maintaining similar angle (circular movement)
+        if len(self.position_history) > 5:
+            # Calculate angle changes over last 5 positions
+            angle_changes = []
+            for i in range(len(self.position_history)-1):
+                dx = self.position_history[i+1][0] - self.position_history[i][0]
+                dy = self.position_history[i+1][1] - self.position_history[i][1]
+                angle = np.arctan2(dy, dx)
+                angle_changes.append(angle)
+            
+            # If angles are very similar, likely moving in a circle
+            if len(angle_changes) > 1:
+                angle_variance = np.var(angle_changes)
+                if angle_variance < 0.1:  # Small variance indicates similar angles
+                    last_reward -= 1.5  # Penalty for maintaining similar angle
+
+        # Enhanced circular movement detection
+        if len(self.position_history) > 20:
+            # Calculate the center of recent positions
+            recent_x = sum(p[0] for p in self.position_history[-20:]) / 20
+            recent_y = sum(p[1] for p in self.position_history[-20:]) / 20
+            
+            # Calculate average distance from center and variance
+            distances = [np.sqrt((p[0] - recent_x)**2 + (p[1] - recent_y)**2) 
+                        for p in self.position_history[-20:]]
+            avg_dist = sum(distances) / 20
+            dist_variance = np.var(distances)
+            
+            # If average distance is small and variance is low, likely moving in a tight circle
+            if avg_dist < 40 and dist_variance < 100:
+                last_reward -= 3.0  # Strong penalty for tight circular movement
+            
+            # Additional penalty for small radius turns
+            if avg_dist < 30:
+                last_reward -= 2.0  # Extra penalty for very tight circles
+
         # Get new state
         new_xx = goal_x - self.car.x
         new_yy = goal_y - self.car.y
         new_orientation = Vector(*self.car.velocity).angle((new_xx,new_yy))/180.
         new_state = [self.car.signal1, self.car.signal2, self.car.signal3, new_orientation, -new_orientation]
         
-        # Update distance
+        # Calculate distance to target
         distance = np.sqrt((self.car.x - goal_x)**2 + (self.car.y - goal_y)**2)
         
         # Update ball positions
@@ -346,6 +388,17 @@ class Game(Widget):
                 marker.circle = Ellipse(size=(25, 25))  # Match the new size
                 marker.circle.pos = (marker.x - 15, marker.y - 15)  # Adjusted for new size
 
+        # Reset position history when reaching a target to avoid false penalties
+        if distance < 25:
+            self.position_history = []
+            self.last_positions = set()
+            # Switch to next target point
+            current_target_index = (current_target_index + 1) % len(target_points)
+            goal_x = target_points[current_target_index]['x']
+            goal_y = target_points[current_target_index]['y']
+            last_reward = 20  # Reward for reaching target
+            print(f"Switching to target point {current_target_index + 1}")
+
         # Calculate reward
         if sand[int(self.car.x),int(self.car.y)] > 0:
             self.car.velocity = Vector(0.5, 0).rotate(self.car.angle)
@@ -358,7 +411,7 @@ class Game(Widget):
             if distance < last_distance:
                 last_reward = 0.1
 
-           # Calculate progress towards target
+            # Calculate progress towards target
             progress = last_distance - distance
             
             # Stronger reward for making progress towards target
@@ -387,25 +440,6 @@ class Game(Widget):
             # Stronger penalty for very slow movement
             if abs(self.car.velocity[0]) < 0.5:
                 last_reward -= 0.5
-
-            # Penalty for revisiting recent positions (detect loops)
-            if len(self.position_history) > 10:
-                recent_positions = set(self.position_history[-10:])
-                if current_pos in recent_positions:
-                    last_reward -= 1.0  # Penalty for revisiting recent positions
-
-            # Penalty for moving in circles
-            if len(self.position_history) > 20:
-                # Calculate the center of recent positions
-                recent_x = sum(p[0] for p in self.position_history[-20:]) / 20
-                recent_y = sum(p[1] for p in self.position_history[-20:]) / 20
-                # Calculate average distance from center
-                avg_dist = sum(np.sqrt((p[0] - recent_x)**2 + (p[1] - recent_y)**2) 
-                             for p in self.position_history[-20:]) / 20
-                # If average distance is small, likely moving in circles
-                if avg_dist < 30:
-                    last_reward -= 2.0  # Strong penalty for circular movement
-
 
         # Calculate distance to boundaries
         dist_to_left = self.car.x
@@ -456,14 +490,6 @@ class Game(Widget):
             self.car.angle = (self.car.angle + 180) % 360
             # Reset velocity in the new direction
             self.car.velocity = Vector(2, 0).rotate(self.car.angle)
-
-        if distance < 25:
-            # Switch to next target point
-            current_target_index = (current_target_index + 1) % len(target_points)
-            goal_x = target_points[current_target_index]['x']
-            goal_y = target_points[current_target_index]['y']
-            last_reward = 5  # Reward for reaching target
-            print(f"Switching to target point {current_target_index + 1}")
 
         # Add transition to replay buffer
         done = False  # In this continuous task, episodes don't really end
