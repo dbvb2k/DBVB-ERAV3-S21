@@ -20,7 +20,7 @@ The simulation uses two main images for the environment:
 <img src="images/citymap.png" width="600" alt="City Map">
 
 ### Mask for Road & Obstacles
-<img src="images/mask1.png" width="600" alt="Mask">
+<img src="images/MASK1.png" width="600" alt="Mask">
 
 ## Requirements
 
