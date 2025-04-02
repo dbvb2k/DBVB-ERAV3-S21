@@ -12,6 +12,16 @@ A self-driving car simulation that uses the Twin Delayed Deep Deterministic Poli
 - Save and load functionality for trained models
 - Performance tracking and evaluation metrics
 
+## Environment Visualization
+
+The simulation uses two main images for the environment:
+
+### City Map
+<img src="images/citymap.png" width="600" alt="City Map">
+
+### Mask for Road & Obstacles
+<img src="images/mask1.png" width="600" alt="Mask">
+
 ## Requirements
 
 - Python 3.7+
